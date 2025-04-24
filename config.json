@@ -1,0 +1,5 @@
+{
+    "MAX_FINGERPRINTS_PER_USER": 2,
+    "ADMS_URL": "http://192.168.5.164",
+    "TIMEZONE_OFFSET": -6
+  }
