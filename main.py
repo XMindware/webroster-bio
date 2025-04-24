@@ -52,7 +52,7 @@ class AttendanceApp:
         self.fingerprint = FingerprintManager(update_callback=self.update_status)
         self.fingerprint.refresh_history = self.update_attendance_history
 
-        self.status_label = tk.Label(root, text="Touch to begin", font=("Arial", 24))
+        self.status_label = tk.Label(root, text="Touch to begin", font=("Helvetica", 24))
         self.status_label.place(relx=0.5, rely=0.25, anchor="center")
 
         self.offline_label = tk.Label(root, text="", font=("Arial", 28), fg="red")
@@ -69,10 +69,10 @@ class AttendanceApp:
         self.main_clock_label = tk.Label(
             self.root,
             text="00:00:00",
-            font=("Arial", 45),
+            font=("Arial", 38),
             fg="gray25",
         )
-        self.main_clock_label.pack(pady=(10, 40))  # space between status and bottom
+        self.main_clock_label.place(relx=0.5, rely=0.8, anchor="center")
         self._update_main_clock()
 
         logo_path = os.path.join(os.path.dirname(__file__), "logo500px.png")
@@ -87,7 +87,7 @@ class AttendanceApp:
         admin_button.place(x=10, y=root.winfo_screenheight() - 60)  # 10px from left, near bottom
 
         self.history_box = tk.Frame(self.root, bg="white", bd=2, relief="ridge")
-        self.history_box.place(x=10, y=200)
+        self.history_box.place(x=20, anchor="sw", rely=1.0, y=-100)
 
         #TODO: quitar boton
         if CONFIG.get("debug", False):
@@ -103,7 +103,7 @@ class AttendanceApp:
     def check_idle_timeout(self):
         if not self._screensaver_active and (time.time() - self._last_activity > self.idle_timeout_seconds):
             logging.info("⏳ Idle timeout reached — showing screensaver")
-            self.show_screensaver()
+            #self.show_screensaver()
 
         self.root.after(1000, self.check_idle_timeout)  # Loop again every second
 
@@ -281,7 +281,7 @@ class AttendanceApp:
 
         pin_window = tk.Toplevel(self.root)
         pin_window.title("Enter Admin PIN")
-        pin_window.geometry("300x200")
+        pin_window.geometry("280x180")
         pin_window.grab_set()
         pin_window.attributes("-topmost", True)
         pin_window.focus_force()
@@ -324,7 +324,7 @@ class AttendanceApp:
     def manage_users_gui(self):
         user_win = tk.Toplevel(self.root)
         user_win.title("Manage Users")
-        user_win.geometry("500x400")
+        user_win.geometry("320x280")
         user_win.grab_set()
         user_win.attributes("-topmost", True)
         user_win.focus_force()
@@ -466,10 +466,10 @@ class AttendanceApp:
 
         screen_w = self.root.winfo_screenwidth()
         screen_h = self.root.winfo_screenheight()
-        win_w = 440
-        win_h = 500
+        win_w = 320
+        win_h = 280
         x = (screen_w - win_w) // 2
-        y = screen_h - 500 - 100
+        y = screen_h - 220 - 100
         keypad.geometry(f"{win_w}x{win_h}+{x}+{y}")
         keypad.attributes("-topmost", True)
         keypad.focus_force()
@@ -493,15 +493,15 @@ class AttendanceApp:
         for r, row in enumerate(keys):
             for c, key in enumerate(row):
                 action = (lambda x=key: clear() if x == 'C' else backspace() if x == '←' else append_char(x))
-                tk.Button(keypad_frame, text=key, width=8, height=3, font=("Arial", 16), command=action).grid(row=r, column=c, padx=10, pady=10)
+                tk.Button(keypad_frame, text=key, width=5, height=2, font=("Arial", 12), command=action).grid(row=r, column=c, padx=4, pady=4)
 
         def done():
             if on_done:
                 on_done()
             keypad.destroy()
 
-        tk.Button(keypad_frame, text="Enter", width=26, font=("Arial", 14), command=done).grid(
-            row=4, column=0, columnspan=3, pady=20
+        tk.Button(keypad_frame, text="Enter", width=26, font=("Arial", 12), command=done).grid(
+            row=4, column=0, columnspan=3, pady=10
         )
 
 if __name__ == "__main__":
