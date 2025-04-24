@@ -2,6 +2,7 @@ import time
 import logging
 import socket
 import os
+import subprocess
 from fingerprint_manager import FingerprintManager
 
 # Setup logging
@@ -42,8 +43,6 @@ def run_git_update():
         return False
 
 # Constants
-SN = "BIOPI0001"
-ADMS_URL = "http://192.168.5.164"
 INTERVAL_SECONDS = 20  # 20 seconds
 
 def main():
@@ -64,7 +63,7 @@ def main():
                 current_time = time.time()
                 if current_time - last_update_check > update_interval:
                     last_update_check = current_time
-                    if run_git_update():
+                    if 0    : #run_git_update():
                         logging.info("♻️ Restarting sync service after update...")
                         os.system("sudo systemctl restart webroster-bio-ui.service")
                         os.system("sudo systemctl restart webroster-sync.service")

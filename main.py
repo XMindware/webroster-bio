@@ -4,6 +4,7 @@ import threading
 import time
 import os
 import json
+import uuid
 from datetime import datetime, timedelta
 from fingerprint_manager import FingerprintManager
 import logging
@@ -13,6 +14,14 @@ from PIL import Image, ImageTk
 
 with open(os.path.join(os.path.dirname(__file__), "config.json")) as f:
     CONFIG = json.load(f)
+
+def get_device_sn(prefix="WBIO"):
+    mac = uuid.getnode()
+    mac_hex = f"{mac:012X}"[-6:]  # get last 6 characters (uppercase)
+    return f"{prefix}{mac_hex}"
+
+
+SN=get_device_sn()
 
 TIMEZONE_OFFSET = CONFIG.get("TIMEZONE_OFFSET", -6)
 
@@ -32,21 +41,22 @@ class AttendanceApp:
         self.root.title("Webroster Bio")
         self.root.attributes("-fullscreen", True)
         logging.info("Starting AttendanceApp")
+        logging.info(f"Device SN: {SN}")
         self.idle_timeout_seconds = 20  # change as needed
         self._last_activity = time.time()
         self._screensaver_active = False
 
-        #root.bind_all("<Motion>", self.reset_idle_timer)
-        #root.bind_all("<Button>", self.reset_idle_timer)
-        #root.bind_all("<Key>", self.reset_idle_timer)
         self.root.bind("<Button>", self.reset_idle_timer)
         self.root.bind("<Key>", self.reset_idle_timer)
 
         self.fingerprint = FingerprintManager(update_callback=self.update_status)
         self.fingerprint.refresh_history = self.update_attendance_history
 
-        self.status_label = tk.Label(root, text="Touch to begin", font=("Arial", 28))
-        self.status_label.pack(pady=60)
+        self.status_label = tk.Label(root, text="Touch to begin", font=("Arial", 24))
+        self.status_label.place(relx=0.5, rely=0.25, anchor="center")
+
+        self.offline_label = tk.Label(root, text="", font=("Arial", 28), fg="red")
+        self.offline_label.pack(pady=60)
 
         self.history_frame = tk.Frame(self.root, bg="black")
         self.history_frame.pack(pady=(10, 0))
@@ -67,7 +77,7 @@ class AttendanceApp:
 
         logo_path = os.path.join(os.path.dirname(__file__), "logo500px.png")
         logo_img = Image.open(logo_path)
-        logo_img = logo_img.resize((300, 300), Image.Resampling.LANCZOS)
+        logo_img = logo_img.resize((120, 120), Image.Resampling.LANCZOS)
         self.logo_photo = ImageTk.PhotoImage(logo_img)
 
         self.logo_label = tk.Label(self.root, image=self.logo_photo, bd=0)
@@ -77,9 +87,11 @@ class AttendanceApp:
         admin_button.place(x=10, y=root.winfo_screenheight() - 60)  # 10px from left, near bottom
 
         self.history_box = tk.Frame(self.root, bg="white", bd=2, relief="ridge")
-        self.history_box.place(x=20, anchor="sw", rely=1.0, y=-90)
+        self.history_box.place(x=10, y=200)
 
-        tk.Button(root, text="Exit", font=("Arial", 12), command=root.quit).pack(side="bottom", pady=10)
+        #TODO: quitar boton
+        if CONFIG.get("debug", False):
+            tk.Button(root, text="Exit", font=("Arial", 12), command=root.quit).place(x=400, y=10)
 
         self.root.after(1000, self.check_idle_timeout)
 
@@ -121,7 +133,7 @@ class AttendanceApp:
             self.slideshow_images = []
             for path in image_paths:
                 img = Image.open(path)
-                img = img.resize((self.root.winfo_screenwidth(), self.root.winfo_screenheight()), Image.Resampling.LANCZOS)
+                img = img.resize((480, 320), Image.Resampling.LANCZOS)
                 self.slideshow_images.append(ImageTk.PhotoImage(img))
 
             if not self.slideshow_images:
@@ -187,7 +199,6 @@ class AttendanceApp:
         self.root.after(1000, self._update_clock)   
                     
     def update_status(self, text, auto_clear=True, delay_ms=10000):
-        self.status_label.config(text=text)
         self.status_label.config(text=text)
 
         if "Offline" in text or "sync failed" in text:
@@ -347,7 +358,8 @@ class AttendanceApp:
         def start_enroll():
             idagente = get_selected_user()
             if idagente:
-                self.fingerprint.enroll_new_fingerprint_for_user(idagente)
+                agente_name = self.fingerprint.db.get_user(idagente)[1]
+                self.fingerprint.enroll_new_fingerprint_for_user(idagente, agente_name)
                 user_win.destroy()
 
         def delete_fingerprints():
