@@ -3,8 +3,12 @@ import tkinter as tk
 import threading
 import time
 import os
+import shutil
+import subprocess
 import json
+import socket
 import uuid
+import psutil
 from datetime import datetime, timedelta
 from fingerprint_manager import FingerprintManager
 import logging
@@ -19,7 +23,34 @@ def get_device_sn(prefix="WBIO"):
     mac = uuid.getnode()
     mac_hex = f"{mac:012X}"[-6:]  # get last 6 characters (uppercase)
     return f"{prefix}{mac_hex}"
+def get_cpu_temp():
+    try:
+        output = os.popen("vcgencmd measure_temp").readline()
+        temp_str = output.replace("temp=", "").replace("'C\n", "")
+        return f"{float(temp_str):.1f}"
+    except:
+        return "?"
 
+def get_uptime():
+    try:
+        output = os.popen("uptime -p").readline()
+        return output.strip()
+    except:
+        return "unknown"
+
+def get_disk_usage():
+    total, used, free = shutil.disk_usage("/")
+    return f"{int(used / total * 100)}%"
+
+def get_memory_usage():
+    mem = psutil.virtual_memory()
+    return f"{int(mem.percent)}%"
+
+def get_git_version(path="/home/mindware/webroster-bio"):
+    try:
+        return subprocess.check_output(["git", "-C", path, "rev-parse", "--short", "HEAD"]).decode().strip()
+    except:
+        return "unknown"
 
 SN=get_device_sn()
 
@@ -45,6 +76,7 @@ class AttendanceApp:
         self.idle_timeout_seconds = 20  # change as needed
         self._last_activity = time.time()
         self._screensaver_active = False
+        self._screensaver_disabled = False
 
         self.root.bind("<Button>", self.reset_idle_timer)
         self.root.bind("<Key>", self.reset_idle_timer)
@@ -57,6 +89,10 @@ class AttendanceApp:
 
         self.offline_label = tk.Label(root, text="", font=("Arial", 28), fg="red")
         self.offline_label.pack(pady=60)
+
+        self.sync_status_icon = tk.Label(self.root, text="🔄", font=("Arial", 18), bg="white")
+        self.sync_status_icon.place(x=5, y=5)
+        self.update_sync_status_icon()
 
         self.history_frame = tk.Frame(self.root, bg="black")
         self.history_frame.pack(pady=(10, 0))
@@ -100,10 +136,27 @@ class AttendanceApp:
         self.main_clock_label.config(text=now.strftime("%H:%M:%S"))
         self.root.after(1000, self._update_main_clock)
 
+    def is_sync_service_running(self):
+        for proc in psutil.process_iter(attrs=["cmdline"]):
+            try:
+                if any("webroster-sync" in part for part in proc.info['cmdline']):
+                    return True
+            except Exception:
+                continue
+        return False
+    
+    def update_sync_status_icon(self):
+        running = self.is_sync_service_running()
+        self.sync_status_icon.config(text="OK" if running else "!!", fg="green" if running else "red")
+        self.root.after(10000, self.update_sync_status_icon)  # Check every 10 seconds
+    
     def check_idle_timeout(self):
         if not self._screensaver_active and (time.time() - self._last_activity > self.idle_timeout_seconds):
-            logging.info("⏳ Idle timeout reached — showing screensaver")
-            #self.show_screensaver()
+            if self._screensaver_disabled:
+                logging.info("Screensaver disabled, not showing")
+                return
+            logging.info("Idle timeout reached, showing screensaver")         
+            self.show_screensaver()
 
         self.root.after(1000, self.check_idle_timeout)  # Loop again every second
 
@@ -114,6 +167,9 @@ class AttendanceApp:
     
 
     def show_screensaver(self):
+        if self._screensaver_disabled:
+            logging.info("Screensaver disabled")
+            return
         logging.info("Showing screensaver")
         if not hasattr(self, 'screensaver'):
             self.screensaver = tk.Toplevel(self.root)
@@ -268,6 +324,8 @@ class AttendanceApp:
 
     def on_admin(self):
         logging.info("Admin setup initiated")
+        self._screensaver_disabled = True
+
         def check_pin():
             entered = pin_entry.get()
             if entered == "1234":
@@ -285,6 +343,7 @@ class AttendanceApp:
         pin_window.grab_set()
         pin_window.attributes("-topmost", True)
         pin_window.focus_force()
+        pin_window.protocol("WM_DELETE_WINDOW", lambda: (self._set_screensaver_enabled(), pin_window.destroy()))
 
         tk.Label(pin_window, text="Enter 4-digit PIN:", font=("Arial", 16)).pack(pady=10)
         pin_entry = tk.Entry(pin_window, show="*", font=("Arial", 18), justify="center", width=10)
@@ -299,68 +358,102 @@ class AttendanceApp:
         pin_window.bind('<Return>', lambda event: check_pin())
 
     def show_admin_menu(self):
-        admin_window = tk.Toplevel(self.root)
-        admin_window.title("Admin Menu")
-        admin_window.geometry("400x300")
-        admin_window.grab_set()
-        admin_window.attributes("-topmost", True)
-        admin_window.focus_force()
+        self.admin_window = tk.Toplevel(self.root)
+        self.admin_window.title("Admin Menu")
+        self.admin_window.geometry("480x320+0+0")
+        self.admin_window.overrideredirect(True)
+        self.admin_window.attributes("-topmost", True)
+        self.admin_window.grab_set()
+        self.admin_window.focus_force()
+        self.admin_window.protocol("WM_DELETE_WINDOW", self.close_admin_window)
 
-        tk.Label(admin_window, text="Admin Options", font=("Arial", 16)).pack(pady=10)
+        tk.Label(self.admin_window, text="Opciones de Admin", font=("Arial", 20)).pack(pady=10)
 
-        # Standard sync + enroll options
-        tk.Button(admin_window, text="Sync Attendance", font=("Arial", 14),
-                command=lambda: self.fingerprint.push_unsynced_logs()).pack(pady=5)
+        btn_frame = tk.Frame(self.admin_window)
+        btn_frame.pack(expand=True)
 
-        tk.Button(admin_window, text="Enroll New User", font=("Arial", 14),
-                command=self.prompt_enroll).pack(pady=5)
+        tk.Button(btn_frame, text="Users", font=("Arial", 14), width=20,
+                command=self.manage_users_gui).pack(pady=5)
 
-        # 👇 New Enroll Fingerprint Option
-        tk.Button(admin_window, text="Users", font=("Arial", 14),
-          command=self.manage_users_gui).pack(pady=5)
+        # System Status Panel
+        status_frame = tk.LabelFrame(self.admin_window, text="System Status", padx=10, pady=10)
+        status_frame.pack(padx=10, pady=10, fill="x")
 
-        tk.Button(admin_window, text="Close", command=admin_window.destroy).pack(pady=10)
+        def get_system_status():
+            try:
+                ip = socket.gethostbyname(socket.gethostname())
+                return {
+                    "CPU Temp": f"{get_cpu_temp()} °C",
+                    "Memory": get_memory_usage(),
+                    "Disk": get_disk_usage(),
+                    "Uptime": get_uptime(),
+                    "IP": ip,
+                    "Version": get_git_version(),
+                    "Sync": "OK" if self.is_sync_service_running() else "!!"
+                }
+            except Exception as e:
+                return {"Error": str(e)}
+
+        def update_system_status():
+            try:
+                status = get_system_status()
+                print("System status:", status)  # Debug
+                for key, val in status.items():
+                    if key in labels:
+                        labels[key].config(text=f"{key}: {val}")
+                        if key == "Sync":
+                            labels[key].config(fg="green" if val == "OK" else "red")
+            except Exception as e:
+                print("Status update error:", e)
+
+        labels = {}
+        for k in ["CPU Temp", "Memory", "Disk", "Uptime", "IP", "Version", "Sync"]:
+            labels[k] = tk.Label(status_frame, text=f"{k}: ...", anchor="w", font=("Arial", 10))
+            labels[k].pack(anchor="w")
+
+        update_system_status()
+
+        tk.Button(self.admin_window, text="✖ Close", font=("Arial", 12),
+                command=self.close_admin_window).place(x=10, y=270)
+
+    def close_admin_window(self):
+        self._set_screensaver_enabled()
+        self.admin_window.destroy()
 
     def manage_users_gui(self):
         user_win = tk.Toplevel(self.root)
         user_win.title("Manage Users")
-        user_win.geometry("320x280")
-        user_win.grab_set()
+        user_win.geometry("480x320+0+0")
+        user_win.overrideredirect(True)
         user_win.attributes("-topmost", True)
+        user_win.grab_set()
         user_win.focus_force()
+        user_win.protocol("WM_DELETE_WINDOW", lambda: (self._set_screensaver_enabled(), user_win.destroy()))
 
-        users = self.get_user_list()
-        if not users:
-            tk.Label(user_win, text="No users found", font=("Arial", 14)).pack(pady=20)
-            return
+        tk.Label(user_win, text="Tap a user:", font=("Arial", 16)).pack(pady=5)
 
-        tk.Label(user_win, text="Tap a user:", font=("Arial", 14)).pack(pady=10)
-
-        # Create scrollable list
         list_frame = tk.Frame(user_win)
         list_frame.pack(pady=5, expand=True, fill="both")
 
         scrollbar = tk.Scrollbar(list_frame)
         scrollbar.pack(side="right", fill="y")
 
-        user_listbox = tk.Listbox(list_frame, font=("Arial", 14), height=10, yscrollcommand=scrollbar.set)
-        for u in users:
+        user_listbox = tk.Listbox(list_frame, font=("Arial", 14), height=8, yscrollcommand=scrollbar.set)
+        for u in self.get_user_list():
             user_listbox.insert(tk.END, u[1])
         user_listbox.pack(side="left", fill="both", expand=True)
         scrollbar.config(command=user_listbox.yview)
 
         def get_selected_user():
             index = user_listbox.curselection()
-            if not index:
-                return None
-            return users[index[0]][0]  # idagente
+            return None if not index else self.get_user_list()[index[0]][0]
 
         def start_enroll():
             idagente = get_selected_user()
             if idagente:
                 agente_name = self.fingerprint.db.get_user(idagente)[1]
-                self.fingerprint.enroll_new_fingerprint_for_user(idagente, agente_name)
                 user_win.destroy()
+                self.show_enrollment_flow(idagente, agente_name)  # ✅ Called here
 
         def delete_fingerprints():
             idagente = get_selected_user()
@@ -368,10 +461,74 @@ class AttendanceApp:
                 self.fingerprint.delete_fingerprints_for_user(idagente)
                 self.update_status(f"🗑️ Deleted fingerprints for user {idagente}")
                 user_win.destroy()
+                self._set_screensaver_enabled()
 
-        tk.Button(user_win, text="Start Enrollment", font=("Arial", 14), command=start_enroll).pack(pady=10)
-        tk.Button(user_win, text="Delete Fingerprints", font=("Arial", 14), fg="red", command=delete_fingerprints).pack(pady=5)
+        action_frame = tk.Frame(user_win)
+        action_frame.pack(pady=5)
 
+        tk.Button(action_frame, text="Start Enrollment", font=("Arial", 14), width=20, command=start_enroll).pack(pady=2)
+        tk.Button(action_frame, text="Delete Fingerprints", font=("Arial", 14), fg="red", width=20, command=delete_fingerprints).pack(pady=2)
+        tk.Button(user_win, text="✖ Close", font=("Arial", 12), command=lambda: (self._set_screensaver_enabled(), user_win.destroy())).place(x=10, y=280)
+
+    def show_enrollment_flow(self, idagente, name):
+        self._screensaver_disabled = True
+        self.fingerprint.stop_fingerprint_listener()  # ✅ Stop listener before enrollment
+
+        enroll_win = tk.Toplevel(self.root)
+        enroll_win.title("Enrollment Process")
+        enroll_win.geometry("480x320+0+0")
+        enroll_win.overrideredirect(True)
+        enroll_win.attributes("-topmost", True)
+        enroll_win.grab_set()
+        enroll_win.focus_force()
+
+        def finish():
+            enroll_win.destroy()
+            self.fingerprint.start_fingerprint_listener()  # ✅ Restart listener after
+            self.manage_users_gui()
+
+        instruction = tk.Label(enroll_win, text="Preparando captura...", font=("Arial", 18), wraplength=460)
+        instruction.pack(pady=40)
+
+        status = tk.Label(enroll_win, text="", font=("Arial", 16))
+        status.pack(pady=10)
+
+        cancel_btn = tk.Button(enroll_win, text="✖ Cerrar", font=("Arial", 12), command=finish)
+        cancel_btn.pack(side="bottom", pady=10)
+        
+        def update_instruction(text):
+            instruction.config(text=text)
+
+        def update_status(text):
+            status.config(text=text)
+
+        def finish():
+            enroll_win.destroy()
+            self.fingerprint.start_fingerprint_listener()  # ✅ Restart listener after
+            self.manage_users_gui()
+
+        def run_enrollment():
+            try:
+                update_instruction("Coloca el dedo en el lector...")
+                result = self.fingerprint.enroll_new_fingerprint_for_user(
+                    idagente, name,
+                    on_update=update_instruction,
+                    on_status=update_status
+                )
+                if result:
+                    update_instruction("✅ Huella registrada con éxito\nPresiona '✖ Cancelar' para volver")
+                else:
+                    update_instruction("⚠️ No se pudo registrar la huella\nPresiona '✖ Cancelar' para volver")
+            except Exception as e:
+                logging.exception("Enrollment error")
+                update_instruction("💥 Error: " + str(e) + "\nPresiona '✖ Cancelar' para volver")
+
+        print("Starting enrollment thread")
+        threading.Thread(target=run_enrollment, daemon=True).start()
+
+
+    def _set_screensaver_enabled(self):
+        self._screensaver_disabled = False
 
     def delete_fingerprints_for_user(self, idagente):
         try:
@@ -394,70 +551,6 @@ class AttendanceApp:
         except Exception as e:
             logging.exception("Error deleting fingerprints for user")
             self.update_status(f"💥 Error deleting fingerprints")
-            
-    def enroll_fingerprint_gui(self):
-        enroll_win = tk.Toplevel(self.root)
-        enroll_win.title("Enroll Finger for User")
-        enroll_win.geometry("400x200")
-        enroll_win.grab_set()
-        enroll_win.attributes("-topmost", True)
-        enroll_win.focus_force()
-
-        users = self.get_user_list()
-
-        if not users:
-            tk.Label(enroll_win, text="No users found", font=("Arial", 14)).pack(pady=20)
-            return
-
-        tk.Label(enroll_win, text="Select user to enroll fingerprint:", font=("Arial", 14)).pack(pady=10)
-
-        selected = tk.StringVar()
-        selected.set(users[0][1])  # Use display name with finger IDs
-
-        dropdown = tk.OptionMenu(enroll_win, selected, *[u[1] for u in users])
-        dropdown.config(font=("Arial", 12))
-        dropdown.pack(pady=5)
-
-        def enroll_selected():
-            raw = selected.get()
-            idagente = int(raw.split(" - ")[0])  # Extract ID
-            self.fingerprint.enroll_new_fingerprint_for_user(idagente)
-            enroll_win.destroy()
-
-
-        tk.Button(enroll_win, text="Start Enrollment", font=("Arial", 14), command=enroll_selected).pack(pady=15)
-
-
-
-    def prompt_enroll(self):
-        enroll_prompt = tk.Toplevel(self.root)
-        enroll_prompt.title("Enroll Finger")
-        enroll_prompt.geometry("300x200")
-        enroll_prompt.grab_set()
-        enroll_prompt.attributes("-topmost", True)
-        enroll_prompt.focus_force()
-        logging.info("Enrollment prompt opened")
-
-        tk.Label(enroll_prompt, text="Enter ID (0–127):", font=("Arial", 14)).pack(pady=10)
-        id_entry = tk.Entry(enroll_prompt, font=("Arial", 18), justify="center")
-        id_entry.pack(pady=5)
-        id_entry.focus_set()
-        self.root.after(100, lambda: self.show_numeric_keypad(id_entry, on_done=enroll_action))
-
-        error = tk.Label(enroll_prompt, font=("Arial", 12))
-        error.pack()
-
-        def enroll_action():
-            try:
-                pos_id = int(id_entry.get())
-                if not (0 <= pos_id <= 127):
-                    raise ValueError("Out of range")
-
-                enroll_prompt.destroy()
-                self.fingerprint.enroll_fingerprint(pos_id)
-
-            except ValueError:
-                error.config(text="❗ Invalid ID", fg="red")
 
     def show_numeric_keypad(self, target_entry, on_done=None):
         keypad = tk.Toplevel(self.root)
@@ -466,10 +559,10 @@ class AttendanceApp:
 
         screen_w = self.root.winfo_screenwidth()
         screen_h = self.root.winfo_screenheight()
-        win_w = 320
-        win_h = 280
+        win_w = 360
+        win_h = 160
         x = (screen_w - win_w) // 2
-        y = screen_h - 220 - 100
+        y = screen_h - win_h - 20
         keypad.geometry(f"{win_w}x{win_h}+{x}+{y}")
         keypad.attributes("-topmost", True)
         keypad.focus_force()
@@ -482,27 +575,22 @@ class AttendanceApp:
             target_entry.delete(0, tk.END)
             target_entry.insert(0, current[:-1])
 
-        def clear():
-            target_entry.delete(0, tk.END)
-
-        keys = [['1', '2', '3'], ['4', '5', '6'], ['7', '8', '9'], ['C', '0', '←']]
-
         keypad_frame = tk.Frame(keypad)
         keypad_frame.pack(expand=True)
 
-        for r, row in enumerate(keys):
-            for c, key in enumerate(row):
-                action = (lambda x=key: clear() if x == 'C' else backspace() if x == '←' else append_char(x))
-                tk.Button(keypad_frame, text=key, width=5, height=2, font=("Arial", 12), command=action).grid(row=r, column=c, padx=4, pady=4)
+        # Row 1: 1–5
+        for i, digit in enumerate(['1', '2', '3', '4', '5']):
+            tk.Button(keypad_frame, text=digit, font=("Arial", 14), width=3, height=1,
+                    command=lambda d=digit: append_char(d)).grid(row=0, column=i, padx=2, pady=2)
 
-        def done():
-            if on_done:
-                on_done()
-            keypad.destroy()
+        # Row 2: 6–0
+        for i, digit in enumerate(['6', '7', '8', '9', '0']):
+            tk.Button(keypad_frame, text=digit, font=("Arial", 14), width=3, height=1,
+                    command=lambda d=digit: append_char(d)).grid(row=1, column=i, padx=2, pady=2)
 
-        tk.Button(keypad_frame, text="Enter", width=26, font=("Arial", 12), command=done).grid(
-            row=4, column=0, columnspan=3, pady=10
-        )
+        # Row 3: Backspace + Enter
+        tk.Button(keypad_frame, text="←", font=("Arial", 14), width=9, height=1, command=backspace).grid(row=2, column=0, columnspan=2, padx=2, pady=4)
+        tk.Button(keypad_frame, text="Enter", font=("Arial", 14), width=15, height=1, command=lambda: (on_done() if on_done else None, keypad.destroy())).grid(row=2, column=2, columnspan=3, padx=2, pady=4)
 
 if __name__ == "__main__":
     root = tk.Tk()
