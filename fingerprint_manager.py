@@ -110,12 +110,33 @@ class FingerprintManager:
 
     def stop_fingerprint_listener(self):
         self._listener_running = False
-        logging.info("🛑 Fingerprint listener stopped.")
+        if hasattr(self, "_listener_thread") and self._listener_thread.is_alive():
+            self._listener_thread.join(timeout=2)
+            logging.info("🛑 Fingerprint listener thread fully joined.")
+        else:
+            logging.info("🛑 Fingerprint listener was not active.")
 
     def update_status(self, message):
         if self.update_callback:
             self.update_callback(message)
 
+    def delete_fingerprints_for_user(self, idagente):
+        try:
+            finger_ids = self.db.get_finger_ids_by_user(idagente)
+            for fid in finger_ids:
+                result = self.finger.delete_model(fid)
+                if result == adafruit_fingerprint.OK:
+                    logging.info(f"🗑️ Deleted fingerprint ID {fid} from sensor for user {idagente}")
+                elif result == adafruit_fingerprint.NOTFOUND:
+                    logging.warning(f"⚠️ Fingerprint ID {fid} not found on sensor")
+                else:
+                    logging.error(f"❌ Failed to delete fingerprint ID {fid} from sensor, result: {result}")
+
+            self.db.remove_fingerprints_by_user(idagente)
+            logging.info(f"🗂️ Deleted fingerprint DB records for user {idagente}")
+        except Exception as e:
+            logging.exception(f"💥 Error deleting fingerprints for user {idagente}")
+    
     def enroll_new_fingerprint_for_user(self, idagente, name, on_update=None, on_status=None):
         logging.info(f"📥 Starting enrollment for {idagente} / {name}")
 
@@ -139,100 +160,44 @@ class FingerprintManager:
                     time.sleep(0.1)
                 if f.image_2_tz(1) != adafruit_fingerprint.OK:
                     if on_update:
-                        on_update("❌ No se pudo leer la huella")
+                        on_update("No se pudo leer la huella, reintente")
                     return
 
                 if on_update:
-                    on_update("👉 Retire el dedo...")
+                    on_update("Retire el dedo...")
                 while f.get_image() != adafruit_fingerprint.NOFINGER:
                     time.sleep(0.1)
 
                 if on_update:
-                    on_update("👉 Coloque el dedo nuevamente...")
+                    on_update("Coloque el dedo nuevamente...")
                 while f.get_image() != adafruit_fingerprint.OK:
                     time.sleep(0.1)
                 if f.image_2_tz(2) != adafruit_fingerprint.OK:
                     if on_update:
-                        on_update("❌ No se pudo leer la huella")
+                        on_update("No se pudo leer la huella, reintente")
                     return
 
                 if f.create_model() != adafruit_fingerprint.OK:
                     if on_update:
-                        on_update("❌ No se pudo crear la huella")
+                        on_update("No se pudo crear la huella, reintente")
                     return
 
                 if f.store_model(finger_id) == adafruit_fingerprint.OK:
                     self.db.add_fingerprint(idagente, finger_id)
                     if on_update:
-                        on_update(f"✅ Se registró la huella para el usuario {name}")
+                        on_update(f"✅ Se registró la huella para el usuario")
                 else:
                     if on_update:
-                        on_update("❌ Algo pasó, no se pudo guardar la huella")
+                        on_update("Algo pasó, no se pudo guardar la huella, reintente")
             except Exception as e:
-                logging.exception("💥 Error en la captura de huella")
+                logging.exception("Error en la captura de huella")
                 if on_update:
-                    on_update(f"💥 Error: {str(e)}")
+                    on_update(f"Error: {str(e)}")
             finally:
                 self.pause_listener = False
                 logging.info("✅ Enrollment flow complete.")
 
         threading.Thread(target=enroll, daemon=True).start()
-
-    def poll_getrequest(self):
-        adms_url = f"{ADMS_URL}/iclock/getrequest"
-        try:
-            ip = socket.gethostbyname(socket.gethostname())
-            now = datetime.utcnow() + timedelta(hours=TIMEZONE_OFFSET)
-            current_time = now.strftime("%Y-%m-%d %H:%M:%S")
-
-            # Metadata parameters to send with the GET request
-            params = {
-                "SN": SN,
-                "options": "all",
-                "language": "101",
-                "pushver": "3.0.0",
-                "PushOptionsFlag": "1",
-                "ip": socket.gethostbyname(socket.gethostname()),
-                "current_time": current_time,
-                "temp": get_cpu_temp(),
-                "uptime": get_uptime(),
-                "disk": get_disk_usage(),
-                "mem": get_memory_usage(),
-                "gitver": get_git_version()
-            }
-
-            # Final URL with query string
-            query_string = "&".join([f"{k}={v}" for k, v in params.items()])
-            url = f"{adms_url}?{query_string}"
-
-            headers = {
-                "User-Agent": "Mindware_bioterminal",
-                "Accept": "*/*",
-                "Connection": "close",
-                "Content-Type": "application/x-www-form-urlencoded"
-            }
-
-            logging.info(f"🔄 Polling getrequest: {url}")
-
-            response = requests.get(url, headers=headers)
-            body = response.text.strip()
-
-            if response.status_code == 200:
-                if body.startswith("C:"):
-                    logging.info("📩 Received commands from getrequest")
-                    for line in body.splitlines():
-                        if "USERINFO" in line:
-                            self._parse_userinfo_command(line)
-                        # TODO: handle SETTIME, DELETE, etc.
-                else:
-                    logging.info("🕊️ No pending commands")
-            else:
-                logging.warning(f"⚠️ getrequest failed: {response.status_code} - {body}")
-
-        except Exception as e:
-            logging.exception("💥 Error during getrequest polling")
-
-
 
     def send_handshake(self):
         adms_url = f"{ADMS_URL}/iclock/cdata"
@@ -324,8 +289,12 @@ class FingerprintManager:
                 if body.startswith("C:"):
                     logging.info("📩 Received commands from getrequest")
                     for line in body.splitlines():
+                        logging.debug(f"📩 Command line: {line}")
                         if "USERINFO" in line:
                             self._parse_userinfo_command(line)
+                        elif "CONTROL DEVICE 03000000" in line:
+                            logging.warning("🌀 Restart command received from ADMS. Rebooting now.")
+                            self._execute_restart()
                 else:
                     logging.info("🕊️ No pending commands")
             else:
@@ -382,3 +351,10 @@ class FingerprintManager:
                 logging.warning(f"Sync failed due to: {e}")
 
         threading.Thread(target=push, daemon=True).start()
+
+    def _execute_restart(self):
+        try:
+            logging.info("🔁 Rebooting device...")
+            subprocess.Popen(['sudo', '/sbin/reboot'])
+        except Exception as e:
+            logging.exception("💥 Failed to reboot the device.")

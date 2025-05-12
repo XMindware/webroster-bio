@@ -1,48 +1,54 @@
 import sqlite3
 from datetime import datetime
-
+import threading
 class LocalDB:
     def __init__(self, db_path="attendance.db"):
         self.conn = sqlite3.connect(db_path, check_same_thread=False)
+        self.lock = threading.Lock()
         self.create_tables()
 
+
     def create_tables(self):
-        c = self.conn.cursor()
-        c.execute('''
-            CREATE TABLE IF NOT EXISTS users (
-                idempresa INTEGER,
-                idoficina INTEGER,
-                idagente INTEGER PRIMARY KEY,
-                name TEXT,
-                enrolled_at TEXT
-            )
-        ''')
+        with self.lock:
+            c = self.conn.cursor()
+            c.execute('''
+                CREATE TABLE IF NOT EXISTS users (
+                    idempresa INTEGER,
+                    idoficina INTEGER,
+                    idagente INTEGER PRIMARY KEY,
+                    name TEXT,
+                    enrolled_at TEXT
+                )
+            ''')
 
-        c.execute('''
-            CREATE TABLE IF NOT EXISTS fingerprints (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                idagente INTEGER,
-                finger_id INTEGER,
-                FOREIGN KEY (idagente) REFERENCES users(idagente)
-            )
-        ''')
+            c.execute('''
+                CREATE TABLE IF NOT EXISTS fingerprints (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    idagente INTEGER,
+                    finger_id INTEGER,
+                    FOREIGN KEY (idagente) REFERENCES users(idagente)
+                )
+            ''')
 
-        c.execute('''
-            CREATE TABLE IF NOT EXISTS events (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER,
-                timestamp TEXT,
-                type TEXT,
-                synced INTEGER DEFAULT 0
-            )
-        ''')
-        self.conn.commit()
+            c.execute('''
+                CREATE TABLE IF NOT EXISTS events (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER,
+                    timestamp TEXT,
+                    type TEXT,
+                    synced INTEGER DEFAULT 0
+                )
+            ''')
+            self.conn.commit()
 
     def add_user(self, idempresa, idoficina, idagente, name=""):
-        c = self.conn.cursor()
-        c.execute('INSERT OR REPLACE INTO users (idempresa, idoficina, idagente, name, enrolled_at) VALUES (?, ?, ?, ?, ?)',
-                  (idempresa, idoficina, idagente, name, datetime.now().isoformat()))
-        self.conn.commit()
+        with self.lock:
+            c = self.conn.cursor()
+            c.execute(
+                'INSERT OR REPLACE INTO users (idempresa, idoficina, idagente, name, enrolled_at) VALUES (?, ?, ?, ?, ?)',
+                (idempresa, idoficina, idagente, name, datetime.now().isoformat())
+            )
+            self.conn.commit()
 
     def get_finger_ids_by_user(self, idagente):
         c = self.conn.cursor()
@@ -55,10 +61,26 @@ class LocalDB:
         result = c.fetchone()
         return result[0] if result else 0
     
-    def remove_fingerprints_by_user(self, idagente):
+    def count_all_fingerprints(self):
         c = self.conn.cursor()
-        c.execute("DELETE FROM fingerprints WHERE idagente = ?", (idagente,))
-        self.conn.commit()
+        c.execute("SELECT COUNT(*) FROM fingerprints")
+        return c.fetchone()[0]
+
+    def remove_fingerprints_by_user(self, idagente):
+        try:
+            self.lock.acquire()
+            c = self.conn.cursor()
+            c.execute("DELETE FROM fingerprints WHERE idagente = ?", (idagente,))
+            self.conn.commit()
+        except Exception as e:
+            print(f"Error removing fingerprints for user {idagente}: {e}")
+        finally:
+            self.lock.release()
+
+    def get_finger_ids_by_user(self, idagente):
+        return [row[0] for row in self.conn.execute(
+            "SELECT finger_id FROM fingerprints WHERE idagente = ?", (idagente,)
+        )]
 
     def get_next_available_finger_id(self, max_id=127):
         c = self.conn.cursor()
@@ -72,9 +94,10 @@ class LocalDB:
         raise Exception("No available fingerprint slots")
 
     def add_fingerprint(self, idagente, finger_id):
-        c = self.conn.cursor()
-        c.execute('INSERT INTO fingerprints (idagente, finger_id) VALUES (?, ?)', (idagente, finger_id))
-        self.conn.commit()
+        with self.lock:
+            c = self.conn.cursor()
+            c.execute('INSERT INTO fingerprints (idagente, finger_id) VALUES (?, ?)', (idagente, finger_id))
+            self.conn.commit()
     
     def get_agent_by_finger_id(self, finger_id):
         c = self.conn.cursor()
@@ -85,10 +108,11 @@ class LocalDB:
     def add_event(self, user_id, type='checkin', timestamp=None):
         if timestamp is None:
             timestamp = datetime.now().isoformat()
-        c = self.conn.cursor()
-        c.execute('INSERT INTO events (user_id, timestamp, type) VALUES (?, ?, ?)',
-                  (user_id, timestamp, type))
-        self.conn.commit()
+        with self.lock:
+            c = self.conn.cursor()
+            c.execute('INSERT INTO events (user_id, timestamp, type) VALUES (?, ?, ?)',
+                    (user_id, timestamp, type))
+            self.conn.commit()
 
     def get_user(self, user_id):
         c = self.conn.cursor()
@@ -101,9 +125,10 @@ class LocalDB:
         return c.fetchall()
 
     def mark_event_synced(self, event_id):
-        c = self.conn.cursor()
-        c.execute('UPDATE events SET synced = 1 WHERE id = ?', (event_id,))
-        self.conn.commit()
+        with self.lock:
+            c = self.conn.cursor()
+            c.execute('UPDATE events SET synced = 1 WHERE id = ?', (event_id,))
+            self.conn.commit()
 
     def get_unsynced_attlogs(self):
         c = self.conn.cursor()
