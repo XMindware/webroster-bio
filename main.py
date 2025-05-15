@@ -448,7 +448,7 @@ class AttendanceApp:
                 max_capacity = 127
 
                 return {
-                    "Serial No.": f"{get_device_sn()}",
+                    "Serial No.": f"{SN}",
                     "CPU Temp": f"{get_cpu_temp()} °C",
                     "Memory": get_memory_usage(),
                     "Disk": get_disk_usage(),
