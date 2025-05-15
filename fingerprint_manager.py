@@ -21,7 +21,7 @@ except ImportError:
     print("⚠️ Serial module not available. Ensure pyserial is installed.")
     FINGERPRINT_ENABLED = False
 try:    
-    from Adafruit_Fingerprint import Adafruit_Fingerprint
+    from adafruit_fingerprint import Adafruit_Fingerprint
     FINGERPRINT_ENABLED = True
 except ImportError:
     print("⚠️ Adafruit Fingerprint module not available. Ensure it is installed.")
