@@ -59,7 +59,10 @@ class FingerprintManager:
         if FINGERPRINT_ENABLED:
             print("🔄 Initializing FingerprintManager...")
             self.serial = serial.Serial("/dev/ttyUSB0", baudrate=57600, timeout=1)
-            self.finger = Adafruit_Fingerprint(self.serial)
+            finger = Adafruit_Fingerprint(uart)
+
+            print("OK:", finger.OK)
+            print("NOFINGER:", finger.NOFINGER)
         else:
             print("⚠️ Fingerprint module not available. Fallback to dummy.")
             self.serial = None
