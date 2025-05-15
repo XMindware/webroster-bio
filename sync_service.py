@@ -3,6 +3,7 @@ import logging
 import socket
 import os
 import subprocess
+from datetime import datetime
 from fingerprint_manager import FingerprintManager
 
 # Setup logging
@@ -52,6 +53,7 @@ def main():
 
     last_update_check = 0
     update_interval = 60 * 60  # 1 hour
+    last_log_upload_date = None
 
     while True:
         try:
@@ -68,7 +70,10 @@ def main():
                         os.system("sudo systemctl restart webroster-bio-ui.service")
                         os.system("sudo systemctl restart webroster-sync.service")
                         return  # Exit this instance after triggering restart
-
+                today = datetime.now().date()
+                if last_log_upload_date != today:
+                    manager.upload_latest_log()
+                    last_log_upload_date = today
             else:
                 logging.warning("🌐 No internet connection. Retrying in 20 seconds.")
 

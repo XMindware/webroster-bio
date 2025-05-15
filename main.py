@@ -1,21 +1,54 @@
-from PIL import Image, ImageTk
-import tkinter as tk
-from tkinter import messagebox
-import threading
-import time
 import os
-import shutil
-import subprocess
+import sys
+import time
 import json
-import socket
 import uuid
 import psutil
-from datetime import datetime, timedelta
-from fingerprint_manager import FingerprintManager
+import shutil
+import signal
+import socket
 import logging
+import threading
+import subprocess
+import pygame
 import glob
+from logging.handlers import RotatingFileHandler
+from datetime import datetime, timedelta
+from tkinter import messagebox
+import tkinter as tk
 from PIL import Image, ImageTk
+from fingerprint_manager import FingerprintManager
 
+def graceful_exit(signum, frame):
+    print("🛑 Caught signal, exiting...")
+    try:
+        root.destroy()
+    except:
+        pass
+    sys.exit(0)
+
+signal.signal(signal.SIGINT, graceful_exit)
+signal.signal(signal.SIGTERM, graceful_exit)
+
+# Create logs folder
+os.makedirs("logs", exist_ok=True)
+
+log_path = "logs/webroster.log"
+
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+
+# Rotating file handler: 1 MB max, 5 backups
+file_handler = RotatingFileHandler(log_path, maxBytes=1_000_000, backupCount=5)
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+file_handler.setFormatter(formatter)
+
+logger.addHandler(file_handler)
+
+# Optional: also log to console
+console_handler = logging.StreamHandler()
+console_handler.setFormatter(formatter)
+logger.addHandler(console_handler)
 
 with open(os.path.join(os.path.dirname(__file__), "config.json")) as f:
     CONFIG = json.load(f)
@@ -84,10 +117,11 @@ class AttendanceApp:
         self.root.attributes("-fullscreen", True)
         logging.info("Starting AttendanceApp")
         logging.info(f"Device SN: {SN}")
-        self.idle_timeout_seconds = 20  # change as needed
+        self.idle_timeout_seconds = 120  # 2 minutes
         self._last_activity = time.time()
         self._screensaver_active = False
         self._screensaver_disabled = False
+        pygame.mixer.init(frequency=22050, size=-16, channels=2, buffer=512)
 
         self.child_windows = []
 
@@ -140,6 +174,14 @@ class AttendanceApp:
             tk.Button(root, text="Exit", font=("Arial", 12), command=root.quit).place(x=400, y=10)
 
         self.root.after(1000, self.check_idle_timeout)
+
+    def play_sound(self, filename):
+        try:
+            pygame.mixer.music.load(filename)
+            pygame.mixer.music.play()
+        except Exception as e:
+            print(f"⚠️ Failed to play sound {filename}: {e}")
+
 
     def _update_main_clock(self):
         now = datetime.utcnow() + timedelta(hours=TIMEZONE_OFFSET)

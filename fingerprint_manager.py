@@ -11,6 +11,7 @@ import subprocess
 import shutil
 import psutil
 import uuid
+import pygame
 from datetime import datetime, timedelta
 import json
 from db import LocalDB
@@ -27,7 +28,7 @@ def get_device_sn(prefix="WBIO"):
                     serial = line.strip().split(":")[1].strip()
                     return f"{prefix}{serial[-6:].upper()}"
     except Exception as e:
-        return f"{prefix}000000"
+        return f"{prefix}000000"    
 
 MAX_FINGERPRINTS_PER_USER = CONFIG.get("MAX_FINGERPRINTS_PER_USER", 1)
 SN = get_device_sn(CONFIG.get("SN_PREFIX", "WBIO"))
@@ -53,6 +54,15 @@ class FingerprintManager:
         self._listener_running = False
         self._listener_thread = None
         self.db = LocalDB()
+
+    def play_sound(self, filename):
+        try:            
+            pygame.mixer.music.load(filename)
+            pygame.mixer.music.play()
+            print(f"🔊 Playing sound: {filename}")
+        except Exception as e:
+            print(f"⚠️ Failed to play sound {filename}: {e}")
+
 
     def start_fingerprint_listener(self):
         if self._listener_thread and self._listener_thread.is_alive():
@@ -94,6 +104,7 @@ class FingerprintManager:
                         self.update_status(f"✅ Checada registrada, {name}!\n⏰ {now_display}")
 
                         if self.update_callback:
+                            self.play_sound("audios/checada_correcta.wav")
                             self.update_callback(f"Bienvenido {name}!\n⏰ {now_display}")
                             if hasattr(self, "refresh_history"):
                                 self.refresh_history()
@@ -151,7 +162,7 @@ class FingerprintManager:
 
                 finger_id = self.db.get_next_available_finger_id()
                 if on_update:
-                    on_update(f"Capturando huella para usuario {name}...")
+                    on_update(f"Capturando huella para usuario...")
 
                 f = self.finger
 
@@ -225,6 +236,48 @@ class FingerprintManager:
         except Exception as e:
             logging.exception("💥 Handshake error")
     
+    def upload_latest_log():
+        adms_url = f"{ADMS_URL}/iclock/upload-log"  # adjust if needed
+
+        try:
+            # Ensure log folder exists
+            os.makedirs("logs", exist_ok=True)
+
+            today = datetime.now().strftime("%Y-%m-%d")
+            original_log = "logs/webroster.log"
+            renamed_log = f"logs/webroster-{today}.log"
+
+            # Rotate the log file: rename current and create a new one
+            if os.path.exists(original_log):
+                shutil.copy2(original_log, renamed_log)  # make a copy
+                open(original_log, 'w').close()  # clear the original log
+
+            with open(renamed_log, "rb") as f:
+                headers = {
+                    "User-Agent": "Mindware_bioterminal",
+                    "Accept": "*/*",
+                    "Connection": "close"
+                }
+
+                logging.info(f"📤 Uploading log file: {renamed_log} to {adms_url}")
+                response = requests.post(
+                    adms_url,
+                    files={"file": (os.path.basename(renamed_log), f)},
+                    data={"sn": get_device_sn()},
+                    headers=headers
+                )
+
+            if response.status_code == 200:
+                logging.info("✅ Log file uploaded successfully.")
+                # Optional: delete after upload
+                os.remove(renamed_log)
+            else:
+                logging.warning(f"⚠️ Upload failed: {response.status_code} - {response.text}")
+
+        except Exception as e:
+            logging.exception("💥 Exception during log upload")
+
+            
     def poll_getrequest(self):
 
         def get_cpu_temp():
