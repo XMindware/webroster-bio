@@ -54,9 +54,15 @@ with open(os.path.join(os.path.dirname(__file__), "config.json")) as f:
     CONFIG = json.load(f)
 
 def get_device_sn(prefix="WBIO"):
-    mac = uuid.getnode()
-    mac_hex = f"{mac:012X}"[-6:]  # get last 6 characters (uppercase)
-    return f"{prefix}{mac_hex}"
+    try:
+        with open('/proc/cpuinfo', 'r') as f:
+            for line in f:
+                if line.startswith('Serial'):
+                    serial = line.strip().split(":")[1].strip()
+                    return f"{prefix}{serial[-6:].upper()}"
+    except Exception as e:
+        return f"{prefix}000000"    
+    
 def get_cpu_temp():
     try:
         output = os.popen("vcgencmd measure_temp").readline()
