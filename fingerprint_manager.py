@@ -59,7 +59,6 @@ class FingerprintManager:
             print("⚠️ Fingerprint module not available. Fallback to dummy.")
             self.serial = None
             self.finger = None
-        self.finger = adafruit_fingerprint.Adafruit_Fingerprint(self.serial)
         self.update_callback = update_callback
         self.pause_listener = False
         self.allow_listener = True
