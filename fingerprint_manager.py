@@ -251,7 +251,7 @@ class FingerprintManager:
         except Exception as e:
             logging.exception("💥 Handshake error")
     
-    def upload_latest_log():
+    def upload_latest_log(self):
         adms_url = f"{ADMS_URL}/iclock/upload-log"  # adjust if needed
 
         try:
