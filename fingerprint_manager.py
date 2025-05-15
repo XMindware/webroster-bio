@@ -421,16 +421,16 @@ class FingerprintManager:
         threading.Thread(target=push, daemon=True).start()
 
     def _parse_userinfo_command(self, line):
-        # Example line: "C:123:DATA UPDATE USERINFO PIN=148772 Name=John Doe ..."
         try:
             if "USERINFO" not in line:
                 return
 
-            parts = line.split("USERINFO")[-1].strip()
-            tokens = dict(token.split("=", 1) for token in parts.split(" ") if "=" in token)
+            # Remove the prefix up to "USERINFO" and split the rest by tabs
+            data_part = line.split("USERINFO", 1)[-1].strip()
+            tokens = dict(token.split("=", 1) for token in data_part.split("\t") if "=" in token)
 
-            idagente = int(tokens.get("PIN"))
-            name = tokens.get("Name", "")
+            idagente = int(tokens.get("PIN", "0").strip())
+            name = tokens.get("Name", "").strip()
             idempresa = int(tokens.get("IDEmpresa", 1))
             idoficina = int(tokens.get("IDOficina", 1))
 
