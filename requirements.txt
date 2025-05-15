@@ -23,3 +23,6 @@ urllib3==2.4.0
 psutil==7.0.0
 pygame==2.6.1
 pyserial==3.5
+adafruit_fingerprint==1.0.3
+psutil==7.0.0
+

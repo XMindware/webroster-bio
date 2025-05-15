@@ -1,8 +1,6 @@
 # fingerprint_manager.py (patched version)
 import time
 import threading
-import serial
-import adafruit_fingerprint
 import requests
 import re
 import socket
@@ -16,6 +14,13 @@ from datetime import datetime, timedelta
 import json
 from db import LocalDB
 import logging
+
+try:
+    import serial
+    from adafruit_fingerprint import Adafruit_Fingerprint
+    FINGERPRINT_ENABLED = True
+except ImportError:
+    FINGERPRINT_ENABLED = False
 
 with open(os.path.join(os.path.dirname(__file__), "config.json")) as f:
     CONFIG = json.load(f)
@@ -46,8 +51,14 @@ logging.basicConfig(
 
 class FingerprintManager:
     def __init__(self, update_callback=None):
-        uart = serial.Serial("/dev/ttyUSB0", baudrate=57600, timeout=1)
-        self.finger = adafruit_fingerprint.Adafruit_Fingerprint(uart)
+
+        if FINGERPRINT_ENABLED:
+            self.serial = serial.Serial("/dev/ttyUSB0", baudrate=57600, timeout=1)
+            self.finger = Adafruit_Fingerprint(self.serial)
+        else:
+            self.serial = None
+            self.finger = None
+        self.finger = adafruit_fingerprint.Adafruit_Fingerprint(self.serial)
         self.update_callback = update_callback
         self.pause_listener = False
         self.allow_listener = True
