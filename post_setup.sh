@@ -10,7 +10,12 @@ sudo systemctl enable webroster-sync.service
 
 echo "🐍 Creating Python virtual environment..."
 cd /home/mindware/webroster-bio
-python3 -m venv venv
+chmod +x start.sh
+chmod +x start_sync.sh
+if [ ! -d "venv" ]; then
+    echo "🔄 Creating virtual environment..."
+    python3 -m venv venv
+fi
 source venv/bin/activate
 
 echo "📦 Installing Python packages in venv..."
@@ -37,3 +42,5 @@ amixer cset numid=3 1
 sudo systemctl start webroster-bio-ui.service
 sudo systemctl start webroster-sync.service
 echo "🔄 Reloading systemd..."
+sudo systemctl daemon-reload
+echo "✅ Services started."
