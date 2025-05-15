@@ -292,13 +292,14 @@ class AttendanceApp:
         self._run_slideshow()
 
     def _run_slideshow(self):
-        if not self._screensaver_active or not self.slideshow_images:
+        if not self.slideshow_images:
             return
-        # Set next image
+
         self.slideshow_index = (self.slideshow_index + 1) % len(self.slideshow_images)
         self.slideshow_label.config(image=self.slideshow_images[self.slideshow_index])
-        # Schedule next slide in 10 seconds
-        self.root.after(10000, self._run_slideshow)
+        logging.info(f"🖼️ Showing image {self.slideshow_index}")
+
+        self.screensaver.after(5000, self._run_slideshow)  # change every 5 sec
 
     def hide_screensaver(self):
         logging.info("Hiding screensaver")
