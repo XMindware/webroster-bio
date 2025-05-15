@@ -36,4 +36,4 @@ amixer cset numid=3 1
 
 sudo systemctl start webroster-bio-ui.service
 sudo systemctl start webroster-sync.service
-echo "🔄 Reloading systemd...
+echo "🔄 Reloading systemd..."
