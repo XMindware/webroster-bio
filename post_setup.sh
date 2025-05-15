@@ -7,7 +7,6 @@ sudo cp /home/mindware/webroster-bio/setup/webroster-sync.service /etc/systemd/s
 sudo systemctl daemon-reexec
 sudo systemctl enable webroster-bio-ui.service
 sudo systemctl enable webroster-sync.service
-"
 
 echo "🐍 Creating Python virtual environment..."
 cd /home/mindware/webroster-bio
