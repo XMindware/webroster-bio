@@ -1,0 +1,11 @@
+[Unit]
+After=network.target
+
+[Service]
+User=mindware
+WorkingDirectory=/home/mindware/webroster-bio
+ExecStart=/home/mindware/webroster-bio/start_sync.sh
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
