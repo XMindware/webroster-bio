@@ -51,11 +51,12 @@ logging.basicConfig(
 
 class FingerprintManager:
     def __init__(self, update_callback=None):
-
         if FINGERPRINT_ENABLED:
+            print("🔄 Initializing FingerprintManager...")
             self.serial = serial.Serial("/dev/ttyUSB0", baudrate=57600, timeout=1)
             self.finger = adafruit_fingerprint(self.serial)
         else:
+            print("⚠️ Fingerprint module not available. Fallback to dummy.")
             self.serial = None
             self.finger = None
         self.finger = adafruit_fingerprint.Adafruit_Fingerprint(self.serial)
