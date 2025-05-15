@@ -54,7 +54,7 @@ class FingerprintManager:
 
         if FINGERPRINT_ENABLED:
             self.serial = serial.Serial("/dev/ttyUSB0", baudrate=57600, timeout=1)
-            self.finger = Adafruit_Fingerprint(self.serial)
+            self.finger = adafruit_fingerprint(self.serial)
         else:
             self.serial = None
             self.finger = None
