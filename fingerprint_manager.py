@@ -90,41 +90,45 @@ class FingerprintManager:
                 if self.pause_listener or not self.allow_listener:
                     time.sleep(0.5)
                     continue
+                
+                if FINGERPRINT_ENABLED:
+                    logging.debug("Esperando huella en pantalla principal...")
+                    if f.get_image() == adafruit_fingerprint.OK:
+                        if f.image_2_tz(1) != adafruit_fingerprint.OK:
+                            self.update_status("❌ Intente de nuevo")
+                            continue
 
-                logging.debug("Esperando huella en pantalla principal...")
-                if f.get_image() == adafruit_fingerprint.OK:
-                    if f.image_2_tz(1) != adafruit_fingerprint.OK:
-                        self.update_status("❌ Intente de nuevo")
-                        continue
+                        if f.finger_search() != adafruit_fingerprint.OK:
+                            self.update_status("❌ Intente de nuevo")
+                            time.sleep(2)
+                            continue
 
-                    if f.finger_search() != adafruit_fingerprint.OK:
-                        self.update_status("❌ Intente de nuevo")
-                        time.sleep(2)
-                        continue
+                        matched_fid = f.finger_id
+                        agent_id = self.db.get_agent_by_finger_id(matched_fid)
 
-                    matched_fid = f.finger_id
-                    agent_id = self.db.get_agent_by_finger_id(matched_fid)
+                        if agent_id:
+                            user = self.db.conn.execute("SELECT name FROM users WHERE idagente = ?", (agent_id,)).fetchone()
+                            name = user[0] if user else f"User {agent_id}"
+                            now = datetime.utcnow() + timedelta(hours=TIMEZONE_OFFSET)
+                            timestamp = now.isoformat()
+                            self.db.add_event(agent_id, type="checkin", timestamp=timestamp)
+                            now_display = now.strftime("%d/%m/%Y %H:%M")
+                            self.update_status(f"✅ Checada registrada, {name}!\n⏰ {now_display}")
 
-                    if agent_id:
-                        user = self.db.conn.execute("SELECT name FROM users WHERE idagente = ?", (agent_id,)).fetchone()
-                        name = user[0] if user else f"User {agent_id}"
-                        now = datetime.utcnow() + timedelta(hours=TIMEZONE_OFFSET)
-                        timestamp = now.isoformat()
-                        self.db.add_event(agent_id, type="checkin", timestamp=timestamp)
-                        now_display = now.strftime("%d/%m/%Y %H:%M")
-                        self.update_status(f"✅ Checada registrada, {name}!\n⏰ {now_display}")
+                            if self.update_callback:
+                                self.play_sound("audios/checada_correcta.wav")
+                                self.update_callback(f"Bienvenido {name}!\n⏰ {now_display}")
+                                if hasattr(self, "refresh_history"):
+                                    self.refresh_history()
+                        else:
+                            self.update_status("⚠️ La huella no corresponde a un empleado")
 
-                        if self.update_callback:
-                            self.play_sound("audios/checada_correcta.wav")
-                            self.update_callback(f"Bienvenido {name}!\n⏰ {now_display}")
-                            if hasattr(self, "refresh_history"):
-                                self.refresh_history()
-                    else:
-                        self.update_status("⚠️ La huella no corresponde a un empleado")
+                        time.sleep(3)
 
-                    time.sleep(3)
-
-                time.sleep(0.2)
+                    time.sleep(0.2)
+                else:
+                    logging.info("⚠️ Fingerprint module not available. Skipping listener.")
+                    time.sleep(0.5)
 
         self._listener_thread = threading.Thread(target=listen, daemon=True)
         self._listener_thread.start()
