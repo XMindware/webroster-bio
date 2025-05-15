@@ -448,6 +448,7 @@ class AttendanceApp:
                 max_capacity = 127
 
                 return {
+                    "Serial No.": f"{get_device_sn()}",
                     "CPU Temp": f"{get_cpu_temp()} °C",
                     "Memory": get_memory_usage(),
                     "Disk": get_disk_usage(),
@@ -484,7 +485,7 @@ class AttendanceApp:
                 print("Status update error:", e)
 
         labels = {}
-        for k in ["CPU Temp", "Memory", "Disk", "Uptime", "IP", "Version", "Sync", "Fingerprints"]:
+        for k in ["SN", "CPU Temp", "Memory", "Disk", "Uptime", "IP", "Version", "Sync", "Fingerprints"]:
             labels[k] = tk.Label(status_frame, text=f"{k}: ...", anchor="w", font=("Arial", 10))
             labels[k].pack(anchor="w")
 
