@@ -1,31 +1,25 @@
-# Core project dependencies
-pygame==2.6.1
-requests==2.32.3
-pillow==11.2.1
-pyserial==3.5
-psutil==7.0.0
-
-# Adafruit fingerprint + hardware support
-adafruit-circuitpython-fingerprint==2.2.19
-adafruit-circuitpython-busdevice==5.2.11
-adafruit-circuitpython-requests==4.1.10
-adafruit-circuitpython-connectionmanager==3.1.3
-adafruit-circuitpython-typing==1.11.2
 Adafruit-Blinka==8.56.0
 Adafruit-PlatformDetect==3.77.0
 Adafruit-PureIO==1.1.11
-rpi-ws281x==5.0.0
 RPi.GPIO==0.7.1
-
-# Optional hardware comms (only needed for certain configs)
+adafruit-circuitpython-busdevice==5.2.11
+adafruit-circuitpython-connectionmanager==3.1.3
+adafruit-circuitpython-fingerprint==2.2.19
+adafruit-circuitpython-requests==4.1.10
+adafruit-circuitpython-typing==1.11.2
 binho-host-adapter==0.1.6
-pyftdi==0.56.0
-pyusb==1.3.1
-
-# Support
-typing_extensions==4.13.2
 certifi==2025.1.31
 charset-normalizer==3.4.1
 idna==3.10
+pillow==11.2.1
+psutil==7.0.0
+pyftdi==0.56.0
+pygame==2.6.1
+pyserial==3.4
+pyusb==1.3.1
+requests==2.32.3
+rpi_ws281x==5.0.0
+setuptools==66.1.1
+sysv_ipc==1.1.0
+typing_extensions==4.13.2
 urllib3==2.4.0
-sysv-ipc==1.1.0

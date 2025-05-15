@@ -17,9 +17,14 @@ import logging
 
 try:
     import serial
+except ImportError:
+    print("⚠️ Serial module not available. Ensure pyserial is installed.")
+    FINGERPRINT_ENABLED = False
+try:    
     from adafruit_fingerprint import Adafruit_Fingerprint
     FINGERPRINT_ENABLED = True
 except ImportError:
+    print("⚠️ Adafruit Fingerprint module not available. Ensure it is installed.")
     FINGERPRINT_ENABLED = False
 
 with open(os.path.join(os.path.dirname(__file__), "config.json")) as f:
@@ -54,7 +59,7 @@ class FingerprintManager:
         if FINGERPRINT_ENABLED:
             print("🔄 Initializing FingerprintManager...")
             self.serial = serial.Serial("/dev/ttyUSB0", baudrate=57600, timeout=1)
-            self.finger = adafruit_fingerprint(self.serial)
+            self.finger = Adafruit_Fingerprint(self.serial)
         else:
             print("⚠️ Fingerprint module not available. Fallback to dummy.")
             self.serial = None
