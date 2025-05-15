@@ -98,12 +98,12 @@ class FingerprintManager:
                 
                 if FINGERPRINT_ENABLED:
                     logging.debug("Esperando huella en pantalla principal...")
-                    if f.get_image() == Adafruit_Fingerprint.OK:
-                        if f.image_2_tz(1) != Adafruit_Fingerprint.OK:
+                    if f.get_image() == f.OK:
+                        if f.image_2_tz(1) != f.OK:
                             self.update_status("❌ Intente de nuevo")
                             continue
 
-                        if f.finger_search() != Adafruit_Fingerprint.OK:
+                        if f.finger_search() != f.OK:
                             self.update_status("❌ Intente de nuevo")
                             time.sleep(2)
                             continue
@@ -156,9 +156,9 @@ class FingerprintManager:
             finger_ids = self.db.get_finger_ids_by_user(idagente)
             for fid in finger_ids:
                 result = self.finger.delete_model(fid)
-                if result == Adafruit_Fingerprint.OK:
+                if result == self.finger.OK:
                     logging.info(f"🗑️ Deleted fingerprint ID {fid} from sensor for user {idagente}")
-                elif result == Adafruit_Fingerprint.NOTFOUND:
+                elif result == self.finger.NOTFOUND:
                     logging.warning(f"⚠️ Fingerprint ID {fid} not found on sensor")
                 else:
                     logging.error(f"❌ Failed to delete fingerprint ID {fid} from sensor, result: {result}")
@@ -187,33 +187,33 @@ class FingerprintManager:
                 f = self.finger
 
                 # First scan
-                while f.get_image() != Adafruit_Fingerprint.OK:
+                while f.get_image() != f.OK:
                     time.sleep(0.1)
-                if f.image_2_tz(1) != Adafruit_Fingerprint.OK:
+                if f.image_2_tz(1) != f.OK:
                     if on_update:
                         on_update("No se pudo leer la huella, reintente")
                     return
 
                 if on_update:
                     on_update("Retire el dedo...")
-                while f.get_image() != Adafruit_Fingerprint.NOFINGER:
+                while f.get_image() != f.NOFINGER:
                     time.sleep(0.1)
 
                 if on_update:
                     on_update("Coloque el dedo nuevamente...")
-                while f.get_image() != Adafruit_Fingerprint.OK:
+                while f.get_image() != f.OK:
                     time.sleep(0.1)
-                if f.image_2_tz(2) != Adafruit_Fingerprint.OK:
+                if f.image_2_tz(2) != f.OK:
                     if on_update:
                         on_update("No se pudo leer la huella, reintente")
                     return
 
-                if f.create_model() != Adafruit_Fingerprint.OK:
+                if f.create_model() != f.OK:
                     if on_update:
                         on_update("No se pudo crear la huella, reintente")
                     return
 
-                if f.store_model(finger_id) == Adafruit_Fingerprint.OK:
+                if f.store_model(finger_id) == f.OK:
                     self.db.add_fingerprint(idagente, finger_id)
                     if on_update:
                         on_update(f"✅ Se registró la huella para el usuario")
