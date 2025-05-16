@@ -134,12 +134,12 @@ class FingerprintManager:
                     continue
 
                 logging.debug("Esperando huella en pantalla principal...")
-                if af.get_image() == af.OK:
-                    if af.image_2_tz(1) != af.OK:
+                if f.get_image() == f.OK:
+                    if f.image_2_tz(1) != af.OK:
                         self.update_status("❌ Intente de nuevo")
                         continue
 
-                    if af.finger_search() != af.OK:
+                    if f.finger_search() != f.OK:
                         self.update_status("❌ Intente de nuevo")
                         time.sleep(2)
                         continue
