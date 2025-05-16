@@ -220,9 +220,9 @@ class FingerprintManager:
                 f = self.finger
 
                 # First scan
-                while af.get_image() != af.OK:
+                while f.get_image() != af.OK:
                     time.sleep(0.1)
-                if af.image_2_tz(1) != af.OK:
+                if f.image_2_tz(1) != af.OK:
                     if on_update:
                         on_update("No se pudo leer la huella, reintente")
                     return
