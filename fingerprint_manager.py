@@ -144,7 +144,7 @@ class FingerprintManager:
                         time.sleep(2)
                         continue
 
-                    matched_fid = af.finger_id
+                    matched_fid = f.finger_id
                     agent_id = self.db.get_agent_by_finger_id(matched_fid)
 
                     if agent_id:
