@@ -47,7 +47,7 @@ def run_git_update():
 INTERVAL_SECONDS = 20  # 20 seconds
 
 def main():
-    logging.info("🔄 Sync service started.")
+    logging.info("🔄 Sync service started.")        
     manager = FingerprintManager(update_callback=log_status)
     manager.send_handshake()
 

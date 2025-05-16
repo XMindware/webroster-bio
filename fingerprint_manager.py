@@ -68,8 +68,13 @@ class FingerprintManager:
         except serial.SerialException as exc:
             raise RuntimeError(f"❌  No se pudo abrir {port}: {exc}") from exc
 
-        # 3️⃣  Inicializar el sensor Adafruit
-        self.finger = af.Adafruit_Fingerprint(self.uart)
+        try:
+            # 3️⃣  Inicializar el sensor Adafruit
+            self.finger = af.Adafruit_Fingerprint(self.uart)
+        except Exception as exc:
+            logging.exception("❌  Error inicializando el sensor")
+            
+        
 
         # 4️⃣  Atributos de instancia que ya tenías
         self.update_callback = update_callback
