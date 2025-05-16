@@ -134,17 +134,17 @@ class FingerprintManager:
                     continue
 
                 logging.debug("Esperando huella en pantalla principal...")
-                if f.get_image() == af.OK:
-                    if f.image_2_tz(1) != af.OK:
+                if af.get_image() == af.OK:
+                    if af.image_2_tz(1) != af.OK:
                         self.update_status("❌ Intente de nuevo")
                         continue
 
-                    if f.finger_search() != af.OK:
+                    if af.finger_search() != af.OK:
                         self.update_status("❌ Intente de nuevo")
                         time.sleep(2)
                         continue
 
-                    matched_fid = f.finger_id
+                    matched_fid = af.finger_id
                     agent_id = self.db.get_agent_by_finger_id(matched_fid)
 
                     if agent_id:
@@ -220,33 +220,33 @@ class FingerprintManager:
                 f = self.finger
 
                 # First scan
-                while f.get_image() != af.OK:
+                while af.get_image() != af.OK:
                     time.sleep(0.1)
-                if f.image_2_tz(1) != af.OK:
+                if af.image_2_tz(1) != af.OK:
                     if on_update:
                         on_update("No se pudo leer la huella, reintente")
                     return
 
                 if on_update:
                     on_update("Retire el dedo...")
-                while f.get_image() != f.NOFINGER:
+                while af.get_image() != af.NOFINGER:
                     time.sleep(0.1)
 
                 if on_update:
                     on_update("Coloque el dedo nuevamente...")
-                while f.get_image() != af.OK:
+                while af.get_image() != af.OK:
                     time.sleep(0.1)
-                if f.image_2_tz(2) != af.OK:
+                if af.image_2_tz(2) != af.OK:
                     if on_update:
                         on_update("No se pudo leer la huella, reintente")
                     return
 
-                if f.create_model() != af.OK:
+                if af.create_model() != af.OK:
                     if on_update:
                         on_update("No se pudo crear la huella, reintente")
                     return
 
-                if f.store_model(finger_id) == af.OK:
+                if af.store_model(finger_id) == af.OK:
                     self.db.add_fingerprint(idagente, finger_id)
                     if on_update:
                         on_update(f"✅ Se registró la huella para el usuario")
