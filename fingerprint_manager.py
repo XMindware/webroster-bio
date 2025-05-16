@@ -229,24 +229,24 @@ class FingerprintManager:
 
                 if on_update:
                     on_update("Retire el dedo...")
-                while af.get_image() != af.NOFINGER:
+                while f.get_image() != af.NOFINGER:
                     time.sleep(0.1)
 
                 if on_update:
                     on_update("Coloque el dedo nuevamente...")
-                while af.get_image() != af.OK:
+                while f.get_image() != af.OK:
                     time.sleep(0.1)
-                if af.image_2_tz(2) != af.OK:
+                if f.image_2_tz(2) != af.OK:
                     if on_update:
                         on_update("No se pudo leer la huella, reintente")
                     return
 
-                if af.create_model() != af.OK:
+                if f.create_model() != af.OK:
                     if on_update:
                         on_update("No se pudo crear la huella, reintente")
                     return
 
-                if af.store_model(finger_id) == af.OK:
+                if f.store_model(finger_id) == af.OK:
                     self.db.add_fingerprint(idagente, finger_id)
                     if on_update:
                         on_update(f"✅ Se registró la huella para el usuario")
