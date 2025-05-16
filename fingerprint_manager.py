@@ -12,20 +12,12 @@ import uuid
 import pygame
 from datetime import datetime, timedelta
 import json
+import glob
 from db import LocalDB
+import adafruit_fingerprint as af
 import logging
+import serial
 
-try:
-    import serial
-except ImportError:
-    print("⚠️ Serial module not available. Ensure pyserial is installed.")
-    FINGERPRINT_ENABLED = False
-try:    
-    from adafruit_fingerprint import Adafruit_Fingerprint
-    FINGERPRINT_ENABLED = True
-except ImportError:
-    print("⚠️ Adafruit Fingerprint module not available. Ensure it is installed.")
-    FINGERPRINT_ENABLED = False
 
 with open(os.path.join(os.path.dirname(__file__), "config.json")) as f:
     CONFIG = json.load(f)
@@ -55,24 +47,66 @@ logging.basicConfig(
 )
 
 class FingerprintManager:
-    def __init__(self, update_callback=None):
-        if FINGERPRINT_ENABLED:
-            print("🔄 Initializing FingerprintManager...")
-            self.serial = serial.Serial("/dev/ttyUSB0", baudrate=57600, timeout=1)
-            finger = Adafruit_Fingerprint(self.serial)
+    def __init__(self, port: str | None = None,
+                 baudrate: int = 57600,
+                 update_callback=None):
+        """
+        port       →  Si se pasa, se usa tal cual.  
+                      Si es None, se intentan automáticamente /dev/ttyACM* y /dev/ttyUSB*.
+        baudrate   →  Conserva 57600 por defecto (cambia si lo necesitas).
+        """
 
-            print("OK:", finger.OK)
-            print("NOFINGER:", finger.NOFINGER)
-        else:
-            print("⚠️ Fingerprint module not available. Fallback to dummy.")
-            self.serial = None
-            self.finger = None
+        print("🔄 Initializing FingerprintManager…")
+
+        # 1️⃣  Seleccionar puerto automáticamente cuando no se especifica
+        if port is None:
+            port = self._auto_detect_port(baudrate)
+
+        # 2️⃣  Abrir el puerto elegido
+        try:
+            self.uart = serial.Serial(port, baudrate=baudrate, timeout=1)
+        except serial.SerialException as exc:
+            raise RuntimeError(f"❌  No se pudo abrir {port}: {exc}") from exc
+
+        # 3️⃣  Inicializar el sensor Adafruit
+        self.finger = af.Adafruit_Fingerprint(self.uart)
+
+        # 4️⃣  Atributos de instancia que ya tenías
         self.update_callback = update_callback
         self.pause_listener = False
         self.allow_listener = True
         self._listener_running = False
         self._listener_thread = None
         self.db = LocalDB()
+
+    # ---------------------------------------------------------------------
+    #  Métodos auxiliares
+    # ---------------------------------------------------------------------
+    @staticmethod
+    def _auto_detect_port(baudrate: int) -> str:
+        """
+        Devuelve el primer puerto accesible que coincida con /dev/ttyACM* o /dev/ttyUSB*.
+        Lanza RuntimeError si no encuentra ninguno utilizable.
+        """
+        candidates = sorted(
+            glob.glob("/dev/ttyACM*") + glob.glob("/dev/ttyUSB*")
+        )
+
+        if not candidates:
+            raise RuntimeError("❌  No se encontró ningún puerto /dev/ttyACM* ni /dev/ttyUSB*")
+
+        for port in candidates:
+            try:
+                # Intento rápido de abrir/cerrar para comprobar disponibilidad
+                with serial.Serial(port, baudrate=baudrate, timeout=1):
+                    print(f"🔎  Detectado lector en {port}")
+                    return port
+            except serial.SerialException:
+                continue
+
+        raise RuntimeError(
+            f"❌  Ninguno de los puertos {', '.join(candidates)} está disponible"
+        )
 
     def play_sound(self, filename):
         try:            
@@ -98,46 +132,42 @@ class FingerprintManager:
                 if self.pause_listener or not self.allow_listener:
                     time.sleep(0.5)
                     continue
+
+                logging.debug("Esperando huella en pantalla principal...")
+                if f.get_image() == af.OK:
+                    if f.image_2_tz(1) != af.OK:
+                        self.update_status("❌ Intente de nuevo")
+                        continue
+
+                    if f.finger_search() != af.OK:
+                        self.update_status("❌ Intente de nuevo")
+                        time.sleep(2)
+                        continue
+
+                    matched_fid = f.finger_id
+                    agent_id = self.db.get_agent_by_finger_id(matched_fid)
+
+                    if agent_id:
+                        user = self.db.conn.execute("SELECT name FROM users WHERE idagente = ?", (agent_id,)).fetchone()
+                        name = user[0] if user else f"User {agent_id}"
+                        now = datetime.utcnow() + timedelta(hours=TIMEZONE_OFFSET)
+                        timestamp = now.isoformat()
+                        self.db.add_event(agent_id, type="checkin", timestamp=timestamp)
+                        now_display = now.strftime("%d/%m/%Y %H:%M")
+                        self.update_status(f"✅ Checada registrada, {name}!\n⏰ {now_display}")
+
+                        if self.update_callback:
+                            self.play_sound("audios/checada_correcta.wav")
+                            self.update_callback(f"Bienvenido {name}!\n⏰ {now_display}")
+                            if hasattr(self, "refresh_history"):
+                                self.refresh_history()
+                    else:
+                        self.update_status("⚠️ La huella no corresponde a un empleado")
+
+                    time.sleep(3)
+
+                time.sleep(0.2)
                 
-                if FINGERPRINT_ENABLED:
-                    logging.debug("Esperando huella en pantalla principal...")
-                    if f.get_image() == f.OK:
-                        if f.image_2_tz(1) != f.OK:
-                            self.update_status("❌ Intente de nuevo")
-                            continue
-
-                        if f.finger_search() != f.OK:
-                            self.update_status("❌ Intente de nuevo")
-                            time.sleep(2)
-                            continue
-
-                        matched_fid = f.finger_id
-                        agent_id = self.db.get_agent_by_finger_id(matched_fid)
-
-                        if agent_id:
-                            user = self.db.conn.execute("SELECT name FROM users WHERE idagente = ?", (agent_id,)).fetchone()
-                            name = user[0] if user else f"User {agent_id}"
-                            now = datetime.utcnow() + timedelta(hours=TIMEZONE_OFFSET)
-                            timestamp = now.isoformat()
-                            self.db.add_event(agent_id, type="checkin", timestamp=timestamp)
-                            now_display = now.strftime("%d/%m/%Y %H:%M")
-                            self.update_status(f"✅ Checada registrada, {name}!\n⏰ {now_display}")
-
-                            if self.update_callback:
-                                self.play_sound("audios/checada_correcta.wav")
-                                self.update_callback(f"Bienvenido {name}!\n⏰ {now_display}")
-                                if hasattr(self, "refresh_history"):
-                                    self.refresh_history()
-                        else:
-                            self.update_status("⚠️ La huella no corresponde a un empleado")
-
-                        time.sleep(3)
-
-                    time.sleep(0.2)
-                else:
-                    logging.info("⚠️ Fingerprint module not available. Skipping listener.")
-                    time.sleep(0.5)
-
         self._listener_thread = threading.Thread(target=listen, daemon=True)
         self._listener_thread.start()
         logging.info("🔄 Fingerprint listener thread started.")
@@ -190,9 +220,9 @@ class FingerprintManager:
                 f = self.finger
 
                 # First scan
-                while f.get_image() != f.OK:
+                while f.get_image() != af.OK:
                     time.sleep(0.1)
-                if f.image_2_tz(1) != f.OK:
+                if f.image_2_tz(1) != af.OK:
                     if on_update:
                         on_update("No se pudo leer la huella, reintente")
                     return
@@ -204,19 +234,19 @@ class FingerprintManager:
 
                 if on_update:
                     on_update("Coloque el dedo nuevamente...")
-                while f.get_image() != f.OK:
+                while f.get_image() != af.OK:
                     time.sleep(0.1)
-                if f.image_2_tz(2) != f.OK:
+                if f.image_2_tz(2) != af.OK:
                     if on_update:
                         on_update("No se pudo leer la huella, reintente")
                     return
 
-                if f.create_model() != f.OK:
+                if f.create_model() != af.OK:
                     if on_update:
                         on_update("No se pudo crear la huella, reintente")
                     return
 
-                if f.store_model(finger_id) == f.OK:
+                if f.store_model(finger_id) == af.OK:
                     self.db.add_fingerprint(idagente, finger_id)
                     if on_update:
                         on_update(f"✅ Se registró la huella para el usuario")
