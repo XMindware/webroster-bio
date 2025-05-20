@@ -390,7 +390,7 @@ class AttendanceApp:
 
         def check_pin():
             entered = pin_entry.get()
-            if entered == "1234":
+            if entered == "8790":
                 logging.info("Admin PIN accepted")
                 pin_window.grab_release()  # ✅ release grab before destroying
                 pin_window.destroy()
