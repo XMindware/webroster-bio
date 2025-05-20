@@ -82,6 +82,7 @@ class FingerprintManager:
             logging.exception("❌  Error inicializando el sensor")
             self.finger = None  # ensure attribute always exists
 
+        self.play_sound("audios/system_ready.wav")
         # 4️⃣ Other instance attributes
         self.update_callback = update_callback
         self.pause_listener = False
@@ -154,10 +155,12 @@ class FingerprintManager:
 
                 if f.get_image() == af.OK:
                     if f.image_2_tz(1) != af.OK:
+                        self.play_sound("audios/error_checada.wav")
                         self.update_status("❌ Intente de nuevo")
                         continue
 
                     if f.finger_search() != af.OK:
+                        self.play_sound("audios/error_checada.wav")
                         self.update_status("❌ Intente de nuevo")
                         time.sleep(2)
                         continue
