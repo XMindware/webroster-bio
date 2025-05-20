@@ -74,7 +74,6 @@ class FingerprintManager:
 
         # 3️⃣ Try to init the fingerprint sensor
         try:
-            import adafruit_fingerprint as af
             self.finger = af.Adafruit_Fingerprint(self.uart)
 
             logging.info("✅ Sensor de huella inicializado correctamente")
@@ -380,7 +379,7 @@ class FingerprintManager:
             mem = psutil.virtual_memory()
             return f"{int(mem.percent)}%"
 
-        def get_git_version(path="/home/mindware/webroster-bio/webroster-bio-ui"):
+        def get_git_version(path="/home/mindware/webroster-bio"):
             try:
                 return subprocess.check_output(["git", "-C", path, "rev-parse", "--short", "HEAD"]).decode().strip()
             except:
