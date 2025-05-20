@@ -48,41 +48,49 @@ logging.basicConfig(
 
 class FingerprintManager:
     def __init__(self, port: str | None = None,
-                 baudrate: int = 57600,
-                 update_callback=None):
+             baudrate: int = 57600,
+             update_callback=None):
         """
         port       →  Si se pasa, se usa tal cual.  
-                      Si es None, se intentan automáticamente /dev/ttyACM* y /dev/ttyUSB*.
+                    Si es None, se intentan automáticamente /dev/ttyACM* y /dev/ttyUSB*.
         baudrate   →  Conserva 57600 por defecto (cambia si lo necesitas).
         """
 
         print("🔄 Initializing FingerprintManager…")
 
-        # 1️⃣  Seleccionar puerto automáticamente cuando no se especifica
+        # Default to None to avoid AttributeError later
+        self.finger = None
+
+        # 1️⃣ Auto-detect port if needed
         if port is None:
             port = self._auto_detect_port(baudrate)
 
-        # 2️⃣  Abrir el puerto elegido
+        # 2️⃣ Try to open serial port
         try:
             self.uart = serial.Serial(port, baudrate=baudrate, timeout=1)
+            logging.info(f"🔎  Detectado lector en {port}")
         except serial.SerialException as exc:
             raise RuntimeError(f"❌  No se pudo abrir {port}: {exc}") from exc
 
+        # 3️⃣ Try to init the fingerprint sensor
         try:
-            # 3️⃣  Inicializar el sensor Adafruit
+            import adafruit_fingerprint as af
             self.finger = af.Adafruit_Fingerprint(self.uart)
+
+            logging.info("✅ Sensor de huella inicializado correctamente")
+
         except Exception as exc:
             logging.exception("❌  Error inicializando el sensor")
-            
-        
+            self.finger = None  # ensure attribute always exists
 
-        # 4️⃣  Atributos de instancia que ya tenías
+        # 4️⃣ Other instance attributes
         self.update_callback = update_callback
         self.pause_listener = False
         self.allow_listener = True
         self._listener_running = False
         self._listener_thread = None
         self.db = LocalDB()
+
 
     # ---------------------------------------------------------------------
     #  Métodos auxiliares
@@ -131,6 +139,11 @@ class FingerprintManager:
 
         def listen():
             f = self.finger
+
+            if not f:
+                logging.warning("⚠️ Fingerprint sensor is not initialized — listener exiting.")
+                return
+
             self.update_status("Listo para escanear huellas...")
 
             while self._listener_running:
@@ -139,6 +152,7 @@ class FingerprintManager:
                     continue
 
                 logging.debug("Esperando huella en pantalla principal...")
+
                 if f.get_image() == af.OK:
                     if f.image_2_tz(1) != af.OK:
                         self.update_status("❌ Intente de nuevo")
@@ -153,29 +167,35 @@ class FingerprintManager:
                     agent_id = self.db.get_agent_by_finger_id(matched_fid)
 
                     if agent_id:
-                        user = self.db.conn.execute("SELECT name FROM users WHERE idagente = ?", (agent_id,)).fetchone()
+                        user = self.db.conn.execute(
+                            "SELECT name FROM users WHERE idagente = ?", (agent_id,)
+                        ).fetchone()
                         name = user[0] if user else f"User {agent_id}"
+
                         now = datetime.utcnow() + timedelta(hours=TIMEZONE_OFFSET)
                         timestamp = now.isoformat()
                         self.db.add_event(agent_id, type="checkin", timestamp=timestamp)
                         now_display = now.strftime("%d/%m/%Y %H:%M")
+
                         self.update_status(f"✅ Checada registrada, {name}!\n⏰ {now_display}")
 
                         if self.update_callback:
                             self.play_sound("audios/checada_correcta.wav")
                             self.update_callback(f"Bienvenido {name}!\n⏰ {now_display}")
-                            if hasattr(self, "refresh_history"):
-                                self.refresh_history()
+
+                        if hasattr(self, "refresh_history"):
+                            self.refresh_history()
                     else:
                         self.update_status("⚠️ La huella no corresponde a un empleado")
 
                     time.sleep(3)
 
                 time.sleep(0.2)
-                
+
         self._listener_thread = threading.Thread(target=listen, daemon=True)
         self._listener_thread.start()
         logging.info("🔄 Fingerprint listener thread started.")
+
 
     def stop_fingerprint_listener(self):
         self._listener_running = False
