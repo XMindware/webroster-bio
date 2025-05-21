@@ -6,3 +6,5 @@ bioterminal.log
 logs/
 venv/
 LCD-show/
+
+config.json
