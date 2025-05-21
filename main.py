@@ -137,7 +137,13 @@ class AttendanceApp:
         self.fingerprint = FingerprintManager(update_callback=self.update_status)
         self.fingerprint.refresh_history = self.update_attendance_history
 
-        self.status_label = tk.Label(root, text="Touch to begin", font=("Helvetica", 24))
+        self.status_label = tk.Label(
+                root,
+                text="Inicializando...",
+                font=("Helvetica", 24),
+                wraplength=400,         # ← controls max width in pixels
+                justify="center"        # ← center-aligns multi-line text
+            )
         self.status_label.place(relx=0.5, rely=0.25, anchor="center")
 
         self.sync_status_icon = tk.Label(self.root, text="Sync", font=("Arial", 18), bg="white")
