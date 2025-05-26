@@ -154,17 +154,16 @@ class FingerprintManager:
                 logging.debug("Esperando huella en pantalla principal...")
 
                 if f.get_image() == af.OK:
-                    if f.image_2_tz(1) != af.OK:
+                    if f.image_2_tz(1) != f.OK:
                         self.play_sound("audios/error_checada.wav")
-                        self.update_status("❌ Intente de nuevo")
+                        self.update_status("❌ Huella no clara. Intente de nuevo")
                         continue
 
-                    if f.finger_search() != af.OK:
-                        self.play_sound("audios/error_checada.wav")
-                        self.update_status("❌ Intente de nuevo")
+                    if f.finger_search() != f.OK:
+                        self.play_sound("audios/no_match.wav")  # ← New sound, softer tone
+                        self.update_status("⚠️ Huella no reconocida")
                         time.sleep(2)
                         continue
-
                     matched_fid = f.finger_id
                     agent_id = self.db.get_agent_by_finger_id(matched_fid)
 
@@ -188,6 +187,7 @@ class FingerprintManager:
                         if hasattr(self, "refresh_history"):
                             self.refresh_history()
                     else:
+                        self.play_sound("audios/no_match.wav")  # ← New sound, softer tone
                         self.update_status("⚠️ La huella no corresponde a un empleado")
 
                     time.sleep(3)
@@ -242,6 +242,7 @@ class FingerprintManager:
 
                 finger_id = self.db.get_next_available_finger_id()
                 if on_update:
+                    self.play_sound("audios/user_fingerprint_enroll.wav")
                     on_update(f"Capturando huella para usuario...")
 
                 f = self.finger
